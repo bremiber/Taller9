@@ -1,20 +1,11 @@
-#include <sys/types.h>          /* some systems still require this */
-#include <sys/stat.h>
-#include <stdio.h>              /* for convenience */
-#include <stdlib.h>             /* for convenience */
-#include <stddef.h>             /* for offsetof */
-#include <string.h>             /* for convenience */
-#include <unistd.h>             /* for convenience */
-#include <signal.h>             /* for SIG_ERR */ 
-#include <netdb.h> 
-#include <errno.h> 
-#include <syslog.h> 
-#include <sys/socket.h> 
-#include <fcntl.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/resource.h>
+#include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
+#include<unistd.h>
+#include<sys/socket.h>
+#include<arpa/inet.h>
+#include<netinet/in.h>
+#include<netdb.h>
 
 #define BUFLEN 128 
 #define QLEN 10 
@@ -23,76 +14,11 @@
 #define HOST_NAME_MAX 256 
 #endif	
 
+int main(int argc, char **argv){
 
-//Funcion de ayuda para setear la bandera close on exec
-void set_cloexec(int fd){
-	if(fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC) < 0){
-		printf("error al establecer la bandera FD_CLOEXEC\n");	
-	}
-}
-
-
-//Funcion para inicializar el servidor
-int initserver(int type, const struct sockaddr *addr, socklen_t alen, int qlen){
-
-	int fd;
-	int err = 0;
-	
-	if((fd = socket(addr->sa_family, type, 0)) < 0)
-		return -1;
-		
-	if(bind(fd, addr, alen) < 0)
-		goto errout;
-		
-	if(type == SOCK_STREAM || type == SOCK_SEQPACKET){
-		
-			if(listen(fd, qlen) < 0)
-				goto errout;
-	}
-	return fd;
-errout:
-	err = errno;
-	close(fd);
-	errno = err;
-	return (-1);
-}
-
-
-//Damos el servicio
-void serve(int sockfd) { 
-	int clfd; FILE *fp; 
-	char buf[ BUFLEN]; 
-
-	set_cloexec( sockfd); 
-
-	for (;;) { 
-		if (( clfd = accept( sockfd, NULL, NULL)) < 0) { 		//Aceptamos una conexion
-			syslog( LOG_ERR, "ruptimed: accept error: %s", strerror( errno)); 	//si hay error la ponemos en la bitacora			
-			exit( 1); 
-		} 
-
-		set_cloexec(clfd); 
-
-		if (( fp = popen("/usr/bin/uptime", "r")) == NULL) { 		//llamamos al programa uptime con un pipe
-			sprintf( buf, "error: %s\n", strerror( errno)); 
-			send( clfd, buf, strlen( buf), 0); 
-		} 
-		else { 
-			while (fgets( buf, BUFLEN, fp) != NULL) 		//lo que nos haya devuelto uptime, lo mandamos al cliente
-				send( clfd, buf, strlen(buf), 0); 
-			pclose( fp); 						//cerramos el pipe
-		}
-		close(clfd); 							//cerramos la conexion con el cliente.
-	} 
-}
-
-
-
-//Main
-
-int main( int argc, char *argv[]) { 
-	int sockfd, n;
+  	int conexion_servidor, conexion_cliente,n;
 	char *host; 
+	char ruta[BUFLEN];
 
 	if(argc == 1){
 		printf("Uso: ./servidor <ip> <numero de puerto>\n");
@@ -102,7 +28,7 @@ int main( int argc, char *argv[]) {
 	if(argc != 3){
 		printf( "Por favor especificar un numero ip y de puerto\n");
 	}
-
+	
 	int puerto = atoi(argv[2]);
 	//int ip= atoi(argv[1]);
 	
@@ -112,36 +38,51 @@ int main( int argc, char *argv[]) {
 		printf(" malloc error"); 
 	if (gethostname( host, n) < 0) 		//Obtenemos nombre del host
 		printf(" gethostname error"); 
-	
-	printf("Nombre del host: %s\n", host);	//Mostramos nuestro nombre
 
-	
+	printf("Ingrese la ruta del archivo que será enviado: \nget ");
+	fgets(ruta,BUFLEN,stdin);
+	printf("\nNombre del host: %s\n", host);	//Mostramos nuestro nombre
 
-	//Direccion del servidor
-	struct sockaddr_in direccion_servidor;
-
-	memset(&direccion_servidor, 0, sizeof(direccion_servidor));	//ponemos en 0 la estructura direccion_servidor
-
-	//llenamos los campos
-	direccion_servidor.sin_family = AF_INET;		//IPv4
-	direccion_servidor.sin_port = htons(puerto);		//Convertimos el numero de puerto al endianness de la red
-	direccion_servidor.sin_addr.s_addr = inet_addr(argv[1]) ;	//Nos vinculamos a la interface localhost o podemos usar INADDR_ANY para ligarnos A TODAS las interfaces
-
-	
-
-	//inicalizamos servidor (AF_INET + SOCK_STREAM = TCP)
-	if( (sockfd = initserver(SOCK_STREAM, (struct sockaddr *)&direccion_servidor, sizeof(direccion_servidor), 1000)) < 0){	//Hasta 1000 solicitudes en cola 
-		printf("Error al inicializar el servidor\n");	
-	}		
-
-	while(1){
-		serve(sockfd);
-		//TODO servimos
-	}
-	
-
-	
-	exit( 1); 
+  socklen_t longc; //Debemos declarar una variable que contendrá la longitud de la estructura
+  struct sockaddr_in servidor, cliente;
+  char buffer[BUFLEN]; //Declaramos una variable que contendrá los mensajes que recibamos
+  puerto = atoi(argv[2]);
+  conexion_servidor = socket(AF_INET, SOCK_STREAM, 0); //creamos el socket
+  bzero((char *)&servidor, sizeof(servidor)); //llenamos la estructura de 0's
+  servidor.sin_family = AF_INET; //asignamos a la estructura
+  servidor.sin_port = htons(puerto);
+  servidor.sin_addr.s_addr = INADDR_ANY; //esta macro especifica nuestra dirección
+  if(bind(conexion_servidor, (struct sockaddr *)&servidor, sizeof(servidor)) < 0)
+  { //asignamos un puerto al socket
+    printf("Error al asociar el puerto a la conexion\n");
+    close(conexion_servidor);
+    return 1;
+  }
+  listen(conexion_servidor, 3); //Estamos a la escucha
+  printf("A la escucha en el puerto %d\n", ntohs(servidor.sin_port));
+  longc = sizeof(cliente); //Asignamos el tamaño de la estructura a esta variable
+  conexion_cliente = accept(conexion_servidor, (struct sockaddr *)&cliente, &longc); //Esperamos una conexion
+  if(conexion_cliente<0)
+  {
+    printf("Error al aceptar trafico\n");
+    close(conexion_servidor);
+    return 1;
+  }
+  //printf("Conectando con %s:%d\n", inet_ntoa(cliente.sin_addr),htons(cliente.sin_port));
+  if(recv(conexion_cliente, buffer, 100, 0)<0)
+  { //Comenzamos a recibir datos del cliente
+    //Si recv() recibe 0 el cliente ha cerrado la conexion. Si es menor que 0 ha habido algún error.
+    printf("Error al recibir los datos\n");
+    close(conexion_servidor);
+    return 1;
+  }
+  else
+  {
+    printf("El cliente quiere guardar la descarga en el archivo:%s\n", buffer);
+    //printf("El nombre del archivo en el que se va a guardar la descarga es:%s\n", buffer2);
+    bzero((char *)&buffer, sizeof(buffer));
+    send(conexion_cliente, "Descargando....\n", 13, 0);
+  }
+  close(conexion_servidor);
+  return 0;
 }
-
-
