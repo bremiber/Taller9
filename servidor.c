@@ -18,7 +18,6 @@ int main(int argc, char **argv){
 
   	int conexion_servidor, conexion_cliente,n;
 	char *host; 
-	char ruta[BUFLEN];
 
 	if(argc == 1){
 		printf("Uso: ./servidor <ip> <numero de puerto>\n");
@@ -30,7 +29,6 @@ int main(int argc, char **argv){
 	}
 	
 	int puerto = atoi(argv[2]);
-	//int ip= atoi(argv[1]);
 	
 	if (( n = sysconf(_SC_HOST_NAME_MAX)) < 0) 		
 		n = HOST_NAME_MAX; /* best guess */ 
@@ -39,8 +37,6 @@ int main(int argc, char **argv){
 	if (gethostname( host, n) < 0) 		//Obtenemos nombre del host
 		printf(" gethostname error"); 
 
-	printf("Ingrese la ruta del archivo que será enviado: \nget ");
-	fgets(ruta,BUFLEN,stdin);
 	printf("\nNombre del host: %s\n", host);	//Mostramos nuestro nombre
 
   socklen_t longc; //Debemos declarar una variable que contendrá la longitud de la estructura
@@ -51,7 +47,7 @@ int main(int argc, char **argv){
   bzero((char *)&servidor, sizeof(servidor)); //llenamos la estructura de 0's
   servidor.sin_family = AF_INET; //asignamos a la estructura
   servidor.sin_port = htons(puerto);
-  servidor.sin_addr.s_addr = INADDR_ANY; //esta macro especifica nuestra dirección
+  servidor.sin_addr.s_addr = INADDR_ANY; //especifica nuestra dirección
   if(bind(conexion_servidor, (struct sockaddr *)&servidor, sizeof(servidor)) < 0)
   { //asignamos un puerto al socket
     printf("Error al asociar el puerto a la conexion\n");
@@ -68,7 +64,6 @@ int main(int argc, char **argv){
     close(conexion_servidor);
     return 1;
   }
-  //printf("Conectando con %s:%d\n", inet_ntoa(cliente.sin_addr),htons(cliente.sin_port));
   if(recv(conexion_cliente, buffer, 100, 0)<0)
   { //Comenzamos a recibir datos del cliente
     //Si recv() recibe 0 el cliente ha cerrado la conexion. Si es menor que 0 ha habido algún error.
@@ -78,10 +73,21 @@ int main(int argc, char **argv){
   }
   else
   {
-    printf("El cliente quiere guardar la descarga en el archivo:%s\n", buffer);
-    //printf("El nombre del archivo en el que se va a guardar la descarga es:%s\n", buffer2);
+    printf("get %s\n",buffer);
+	FILE *fp;
+	fp = fopen(buffer,"r");        
+	if (fp==NULL) {
+	fputs ("El archivo no existe",stderr); 
+	exit (1);
+	}
+	else{
+	printf("El archivo se esta enviando al cliente...\n");
+	}
+    
+    //printf("Se ha enviado el archivo al cliente");
     bzero((char *)&buffer, sizeof(buffer));
-    send(conexion_cliente, "Descargando....\n", 13, 0);
+    send(conexion_cliente,fp,100,0);
+	fclose(fp);
   }
   close(conexion_servidor);
   return 0;
